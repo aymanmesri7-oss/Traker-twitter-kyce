@@ -94,6 +94,52 @@ client.on('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
+  // !scan command — scan all old messages in the current channel
+  if (message.content.trim() === '!scan') {
+    await message.reply('🔍 Scan des anciens messages en cours...');
+    const sheets = getSheets();
+    let totalAdded = 0;
+    let lastId = null;
+
+    try {
+      while (true) {
+        const options = { limit: 100 };
+        if (lastId) options.before = lastId;
+        const messages = await message.channel.messages.fetch(options);
+        if (messages.size === 0) break;
+
+        for (const [, msg] of messages) {
+          if (msg.author.bot) continue;
+          const handles = extractHandles(msg.content);
+          if (handles.length === 0) continue;
+
+          const vaName = msg.author.displayName
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '')
+            .substring(0, 30) || msg.author.username.toLowerCase();
+
+          await ensureVATab(sheets, vaName);
+
+          for (const handle of handles) {
+            if (!(await handleExists(sheets, vaName, handle))) {
+              await addHandle(sheets, vaName, handle);
+              totalAdded++;
+            }
+          }
+        }
+
+        lastId = messages.last().id;
+        if (messages.size < 100) break;
+      }
+
+      await message.reply(`✅ Scan terminé ! ${totalAdded} nouveau(x) compte(s) ajouté(s) au dashboard.`);
+    } catch (err) {
+      console.error('Scan error:', err.message);
+      await message.reply('❌ Erreur pendant le scan.');
+    }
+    return;
+  }
+
   const handles = extractHandles(message.content);
   if (handles.length === 0) return;
 
