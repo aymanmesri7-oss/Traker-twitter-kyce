@@ -13,8 +13,13 @@ const client = new Client({
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 function getSheets() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY.replace(/\n/g, '\\n');
-  const key = JSON.parse(raw);
+  let raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  let key;
+  try {
+    key = JSON.parse(raw);
+  } catch {
+    key = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
+  }
   const auth = new google.auth.GoogleAuth({
     credentials: key,
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
