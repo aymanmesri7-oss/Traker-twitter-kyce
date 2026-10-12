@@ -82,17 +82,43 @@ function fmtDate(d) {
   return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
 }
 
+const VA_CATEGORY_BASE = 'Salon perso';
 const VA_CATEGORY_ID = '1557159985803305040';
+const MAX_PER_CATEGORY = 49;
+
+async function findOrCreateCategory(guild) {
+  const categories = guild.channels.cache
+    .filter(c => c.type === ChannelType.GuildCategory && (c.id === VA_CATEGORY_ID || c.name.startsWith(VA_CATEGORY_BASE)))
+    .sort((a, b) => a.position - b.position);
+
+  for (const [, cat] of categories) {
+    const count = guild.channels.cache.filter(c => c.parentId === cat.id).size;
+    if (count < MAX_PER_CATEGORY) return cat;
+  }
+
+  const num = categories.size + 1;
+  const newCat = await guild.channels.create({
+    name: `${VA_CATEGORY_BASE} ${num}`,
+    type: ChannelType.GuildCategory
+  });
+  console.log(`Categorie creee: ${newCat.name}`);
+  return newCat;
+}
 
 async function createPrivateChannel(guild, member, ownerId) {
   const channelName = (member.displayName || member.user.username)
     .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || member.user.username.toLowerCase();
-  const exists = guild.channels.cache.find(c => c.name === channelName && c.parentId === VA_CATEGORY_ID);
-  if (exists) return null;
+  const allSalonPerso = guild.channels.cache.filter(c =>
+    c.type === ChannelType.GuildText && c.name === channelName &&
+    (c.parentId === VA_CATEGORY_ID || guild.channels.cache.get(c.parentId)?.name?.startsWith(VA_CATEGORY_BASE))
+  );
+  if (allSalonPerso.size > 0) return null;
+
+  const category = await findOrCreateCategory(guild);
   const channel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
-    parent: VA_CATEGORY_ID,
+    parent: category.id,
     permissionOverwrites: [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
