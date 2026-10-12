@@ -82,26 +82,17 @@ function fmtDate(d) {
   return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
 }
 
-async function getOrCreateVACategory(guild) {
-  const existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === 'salons-va');
-  if (existing) return existing;
-  return guild.channels.create({
-    name: 'salons-va',
-    type: ChannelType.GuildCategory,
-    permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }]
-  });
-}
+const VA_CATEGORY_ID = '1557159985803305040';
 
 async function createPrivateChannel(guild, member, ownerId) {
   const channelName = (member.displayName || member.user.username)
     .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || member.user.username.toLowerCase();
-  const exists = guild.channels.cache.find(c => c.name === channelName && c.parentId);
+  const exists = guild.channels.cache.find(c => c.name === channelName && c.parentId === VA_CATEGORY_ID);
   if (exists) return null;
-  const category = await getOrCreateVACategory(guild);
   const channel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
-    parent: category.id,
+    parent: VA_CATEGORY_ID,
     permissionOverwrites: [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
