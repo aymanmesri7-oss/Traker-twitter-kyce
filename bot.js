@@ -269,24 +269,22 @@ client.on('messageCreate', async (message) => {
   if (message.content.trim() === '!clean') {
     try { await message.delete(); } catch {}
     const dm = await message.author.createDM();
-    await dm.send('Suppression des salons perso en cours...');
+    await dm.send('Suppression des salons crees par le bot...');
     try {
       await message.guild.channels.fetch();
-      const cats = message.guild.channels.cache.filter(c =>
-        c.type === ChannelType.GuildCategory && (c.id === VA_CATEGORY_ID || c.name.startsWith(VA_CATEGORY_BASE))
+      const extraCats = message.guild.channels.cache.filter(c =>
+        c.type === ChannelType.GuildCategory && c.id !== VA_CATEGORY_ID && c.name.startsWith(VA_CATEGORY_BASE)
       );
       let deleted = 0;
-      for (const [, cat] of cats) {
+      for (const [, cat] of extraCats) {
         const children = message.guild.channels.cache.filter(c => c.parentId === cat.id);
         for (const [, ch] of children) {
           await ch.delete();
           deleted++;
         }
-        if (cat.id !== VA_CATEGORY_ID) {
-          await cat.delete();
-        }
+        await cat.delete();
       }
-      await dm.send(`${deleted} salons supprimes.`);
+      await dm.send(`${deleted} salons + ${extraCats.size} categories supprimes.`);
     } catch (err) {
       await dm.send('Erreur: ' + err.message);
     }
