@@ -23,6 +23,14 @@ function timeAgo(dateStr) {
   return `il y a ${days}j`;
 }
 
+function daysSince(dateStr) {
+  if (!dateStr) return Infinity;
+  const parts = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+  if (!parts) return Infinity;
+  const d = new Date(parts[3], parts[2] - 1, parts[1], parts[4], parts[5]);
+  return (Date.now() - d.getTime()) / (24 * 60 * 60 * 1000);
+}
+
 function HealthBar({ stats }) {
   const total = stats.healthy + stats.shadowban + stats.permanent + stats.unknown;
   if (total === 0) return <span style={{ color: '#3f3f46', fontSize: '0.75rem' }}>Aucun compte</span>;
@@ -52,6 +60,11 @@ function HealthBar({ stats }) {
             {stats.warmup} warm-up
           </span>
         )}
+        {(stats.ready || 0) > 0 && (
+          <span style={{ fontSize: '0.7rem', color: '#fbbf24' }}>
+            {stats.ready} pret a poster
+          </span>
+        )}
         {stats.noBio > 0 && (
           <span style={{ fontSize: '0.7rem', color: '#71717a' }}>
             {stats.noBio} sans bio
@@ -62,11 +75,12 @@ function HealthBar({ stats }) {
   );
 }
 
-function VACard({ va }) {
+function VACard({ va, onDelete }) {
   const s = statusConfig[va.status] || statusConfig.Unknown;
   const discordLink = va.channelId && va.guildId
     ? `https://discord.com/channels/${va.guildId}/${va.channelId}`
     : null;
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div style={{
@@ -106,35 +120,38 @@ function VACard({ va }) {
 
       <HealthBar stats={va.healthStats || { healthy: 0, shadowban: 0, permanent: 0, unknown: 0, warmup: 0, noBio: 0 }} />
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-        {discordLink && (
-          <a
-            href={discordLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              background: '#5865F2', color: '#fff', border: 'none',
-              borderRadius: 8, padding: '6px 14px', fontSize: '0.75rem',
-              fontWeight: 600, cursor: 'pointer', textDecoration: 'none',
-              display: 'flex', alignItems: 'center', gap: 4
-            }}
-          >
-            Discord
-          </a>
-        )}
-        {va.accountCount > 0 && (
-          <a
-            href={`https://x.com`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              background: '#27272a', color: '#a1a1aa', border: 'none',
-              borderRadius: 8, padding: '6px 14px', fontSize: '0.75rem',
-              fontWeight: 600, cursor: 'pointer', textDecoration: 'none'
-            }}
-          >
-            Voir sur X
-          </a>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {discordLink && (
+            <a href={discordLink} target="_blank" rel="noopener noreferrer"
+              style={{ background: '#5865F2', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
+              Discord
+            </a>
+          )}
+          {va.accountCount > 0 && (
+            <a href="https://x.com" target="_blank" rel="noopener noreferrer"
+              style={{ background: '#27272a', color: '#a1a1aa', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
+              Voir sur X
+            </a>
+          )}
+        </div>
+        {!confirmDelete ? (
+          <button onClick={() => setConfirmDelete(true)}
+            style={{ background: 'none', border: 'none', color: '#52525b', cursor: 'pointer', fontSize: '0.75rem', padding: '4px 8px' }}
+            title="Supprimer ce VA">
+            &#10005;
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={() => { onDelete(va.name); setConfirmDelete(false); }}
+              style={{ background: '#450a0a', border: '1px solid #991b1b', color: '#ef4444', borderRadius: 6, padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600 }}>
+              Confirmer
+            </button>
+            <button onClick={() => setConfirmDelete(false)}
+              style={{ background: '#27272a', border: 'none', color: '#71717a', borderRadius: 6, padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer' }}>
+              Annuler
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -146,41 +163,47 @@ function TeamCRM() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [minAccounts, setMinAccounts] = useState(0);
+  const [maxDays, setMaxDays] = useState(null);
 
-  useEffect(() => {
-    fetch('/api/crm')
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const reload = () => {
+    fetch('/api/crm').then(r => r.json()).then(d => setData(d)).catch(() => {});
+  };
+
+  useEffect(() => { reload(); setLoading(false); }, []);
+
+  const handleDelete = async (name) => {
+    try {
+      await fetch('/api/crm/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      reload();
+    } catch {}
+  };
 
   const filteredVAs = useMemo(() => {
     if (!data) return [];
     let vas = data.vas;
-    if (search) {
-      vas = vas.filter(v => v.name.toLowerCase().includes(search.toLowerCase()));
-    }
+    if (search) vas = vas.filter(v => v.name.toLowerCase().includes(search.toLowerCase()));
     if (filter === 'active') vas = vas.filter(v => v.status === 'Actif');
     else if (filter === 'inactive') vas = vas.filter(v => v.status === 'Inactif');
     else if (filter === 'noresponse') vas = vas.filter(v => v.status === 'Pas de reponse');
     else if (filter === 'withaccounts') vas = vas.filter(v => v.accountCount > 0);
     else if (filter === 'noaccounts') vas = vas.filter(v => v.accountCount === 0);
+    if (minAccounts > 0) vas = vas.filter(v => v.accountCount >= minAccounts);
+    if (maxDays !== null) vas = vas.filter(v => daysSince(v.lastMessage) > maxDays);
     return vas;
-  }, [data, search, filter]);
+  }, [data, search, filter, minAccounts, maxDays]);
 
-  if (loading) {
+  if (loading || !data) {
     return <div style={{ color: '#71717a', textAlign: 'center', padding: 60 }}>Chargement CRM...</div>;
   }
 
-  if (!data || !data.vas || data.vas.length === 0) {
+  if (!data.vas || data.vas.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: 60 }}>
         <div style={{ fontSize: '3rem', marginBottom: 12 }}>&#128101;</div>
         <div style={{ color: '#71717a', marginBottom: 8 }}>Aucune donnee CRM</div>
         <div style={{ color: '#52525b', fontSize: '0.85rem', maxWidth: 400, margin: '0 auto' }}>
-          Lance <strong style={{ color: '#a1a1aa' }}>!scan</strong> dans ton serveur Discord pour collecter les donnees de ton equipe.
-          Le bot va analyser tous les salons et creer le CRM automatiquement.
+          Le bot collecte les donnees automatiquement au demarrage.
         </div>
       </div>
     );
@@ -188,13 +211,13 @@ function TeamCRM() {
 
   const stats = data.stats;
 
-  const filterBtn = (key, label, count) => (
+  const filterBtn = (key, label, count, color) => (
     <button
-      onClick={() => setFilter(filter === key ? 'all' : key)}
+      onClick={() => { setFilter(filter === key ? 'all' : key); setMinAccounts(0); setMaxDays(null); }}
       style={{
         background: filter === key ? '#27272a' : 'transparent',
-        color: filter === key ? '#fff' : '#71717a',
-        border: '1px solid #27272a', borderRadius: 20,
+        color: filter === key ? (color || '#fff') : '#71717a',
+        border: `1px solid ${filter === key ? (color || '#27272a') : '#27272a'}`, borderRadius: 20,
         padding: '6px 14px', fontSize: '0.75rem',
         fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap'
       }}
@@ -203,21 +226,25 @@ function TeamCRM() {
     </button>
   );
 
+  const accountCounts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const uniqueAccountCounts = accountCounts.filter(n => data.vas.some(v => v.accountCount >= n));
+
   return (
     <div>
       {/* Stats */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
         gap: 10, marginBottom: 20
       }}>
         {[
           { label: 'TOTAL VAs', value: stats.total, color: '#3b82f6', sub: 'dans l\'equipe' },
-          { label: 'ACTIFS', value: stats.active, color: '#22c55e', sub: 'repondent' },
+          { label: 'ACTIFS', value: stats.active, color: '#22c55e', sub: 'repondent < 2j' },
           { label: 'INACTIFS', value: stats.inactive, color: '#f97316', sub: '2-7 jours' },
-          { label: 'SANS REPONSE', value: stats.noResponse, color: '#ef4444', sub: '+7 jours' },
+          { label: 'SANS REPONSE', value: stats.noResponse, color: '#ef4444', sub: 'jamais / +7j' },
           { label: 'ONT ENVOYE', value: stats.withAccounts, color: '#a78bfa', sub: 'leurs comptes' },
           { label: 'PAS ENVOYE', value: stats.withoutAccounts, color: '#f43f5e', sub: 'pas de comptes' },
+          { label: 'WARM-UP', value: stats.warmupTotal || 0, color: '#fbbf24', sub: 'comptes < 4j' },
           { label: 'COMPTES TOTAL', value: stats.totalAccounts, color: '#06b6d4', sub: 'comptes Twitter' }
         ].map(card => (
           <div key={card.label} style={{
@@ -227,7 +254,7 @@ function TeamCRM() {
             <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#52525b', letterSpacing: '0.05em', marginBottom: 6 }}>
               {card.label}
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>
               {card.value}
             </div>
             <div style={{ fontSize: '0.7rem', color: '#3f3f46', marginTop: 2 }}>{card.sub}</div>
@@ -236,7 +263,7 @@ function TeamCRM() {
       </div>
 
       {/* Search + Filters */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: '#18181b', borderRadius: 12,
@@ -249,17 +276,58 @@ function TeamCRM() {
             style={{ background: 'none', border: 'none', color: '#e4e4e7', fontSize: '0.85rem', outline: 'none', width: '100%' }}
           />
         </div>
-        {filterBtn('active', 'Actifs', stats.active)}
-        {filterBtn('inactive', 'Inactifs', stats.inactive)}
-        {filterBtn('noresponse', 'Sans reponse', stats.noResponse)}
-        {filterBtn('withaccounts', 'Ont envoye', stats.withAccounts)}
-        {filterBtn('noaccounts', 'Pas envoye', stats.withoutAccounts)}
+        {filterBtn('active', 'Actifs', stats.active, '#22c55e')}
+        {filterBtn('inactive', 'Inactifs', stats.inactive, '#f97316')}
+        {filterBtn('noresponse', 'Sans reponse', stats.noResponse, '#ef4444')}
+        {filterBtn('withaccounts', 'Ont envoye', stats.withAccounts, '#a78bfa')}
+        {filterBtn('noaccounts', 'Pas envoye', stats.withoutAccounts, '#f43f5e')}
+      </div>
+
+      {/* Sub-filters */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+        {filter === 'withaccounts' && (
+          <>
+            <span style={{ color: '#52525b', fontSize: '0.75rem', alignSelf: 'center' }}>Min comptes:</span>
+            {uniqueAccountCounts.map(n => (
+              <button key={n} onClick={() => setMinAccounts(minAccounts === n ? 0 : n)}
+                style={{
+                  background: minAccounts === n ? '#a78bfa' : '#1e1e22',
+                  color: minAccounts === n ? '#000' : '#71717a',
+                  border: 'none', borderRadius: 12, padding: '4px 10px',
+                  fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer'
+                }}>
+                {n}+
+              </button>
+            ))}
+          </>
+        )}
+        {(filter === 'active' || filter === 'all') && (
+          <>
+            <span style={{ color: '#52525b', fontSize: '0.75rem', alignSelf: 'center' }}>Pas repondu depuis:</span>
+            {[1, 2, 3, 5, 7].map(d => (
+              <button key={d} onClick={() => setMaxDays(maxDays === d ? null : d)}
+                style={{
+                  background: maxDays === d ? '#f97316' : '#1e1e22',
+                  color: maxDays === d ? '#000' : '#71717a',
+                  border: 'none', borderRadius: 12, padding: '4px 10px',
+                  fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer'
+                }}>
+                +{d}j
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Count */}
+      <div style={{ color: '#52525b', fontSize: '0.75rem', marginBottom: 8 }}>
+        {filteredVAs.length} VA{filteredVAs.length > 1 ? 's' : ''} affiche{filteredVAs.length > 1 ? 's' : ''}
       </div>
 
       {/* VA List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filteredVAs.map(va => (
-          <VACard key={va.name} va={va} />
+          <VACard key={va.name} va={va} onDelete={handleDelete} />
         ))}
       </div>
 

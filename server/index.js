@@ -138,6 +138,10 @@ app.get('/api/crm', authMiddleware, async (req, res) => {
         if (addMatch) {
           const addDate = new Date(parseInt(addMatch[3]), parseInt(addMatch[2]) - 1, parseInt(addMatch[1]));
           if (now - addDate.getTime() < FOUR_DAYS) s.warmup++;
+          else if (!acc.lastTweet) {
+            if (!s.ready) s.ready = 0;
+            s.ready++;
+          }
         }
       }
     }
@@ -153,13 +157,57 @@ app.get('/api/crm', authMiddleware, async (req, res) => {
     const noResponse = vas.filter(v => v.status === 'Pas de reponse').length;
     const totalAccounts = vas.reduce((s, v) => s + v.accountCount, 0);
 
+    const warmupTotal = vas.reduce((s, v) => s + (v.healthStats.warmup || 0), 0);
+    const readyTotal = vas.reduce((s, v) => s + (v.healthStats.ready || 0), 0);
+
     res.json({
-      vas: vas.map(v => ({ ...v, accounts: undefined })),
-      stats: { total: vas.length, withAccounts, withoutAccounts: vas.length - withAccounts, active, inactive, noResponse, totalAccounts }
+      vas,
+      stats: { total: vas.length, withAccounts, withoutAccounts: vas.length - withAccounts, active, inactive, noResponse, totalAccounts, warmupTotal, readyTotal }
     });
   } catch (err) {
     console.error('CRM error:', err);
     res.status(500).json({ error: 'Erreur CRM' });
+  }
+});
+
+app.post('/api/crm/delete', authMiddleware, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'name requis' });
+    const { getSheetNames } = require('./sheets');
+    const sheets = require('./sheets');
+    const sheetNames = await getSheetNames();
+    if (sheetNames.includes(name)) {
+      const gs = sheets.batchUpdateSheet ? require('googleapis').google : null;
+    }
+    const crmData = await getCRMData();
+    const idx = crmData.findIndex(v => v.name === name);
+    if (idx >= 0) {
+      const gSheets = require('./sheets');
+      const allSheets = require('googleapis').google;
+      const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+      let key;
+      try { key = JSON.parse(raw); } catch { key = JSON.parse(Buffer.from(raw, 'base64').toString('utf8')); }
+      const auth = new allSheets.auth.GoogleAuth({ credentials: key, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+      const s = allSheets.sheets({ version: 'v4', auth });
+      const crmRes = await s.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: `'_CRM'!A:A` });
+      const rows = crmRes.data.values || [];
+      const rowIdx = rows.findIndex((r, i) => i > 0 && r[0] === name);
+      if (rowIdx >= 0) {
+        const meta = await s.spreadsheets.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID });
+        const sheet = meta.data.sheets.find(sh => sh.properties.title === '_CRM');
+        if (sheet) {
+          await s.spreadsheets.batchUpdate({
+            spreadsheetId: process.env.GOOGLE_SHEET_ID,
+            requestBody: { requests: [{ deleteDimension: { range: { sheetId: sheet.properties.sheetId, dimension: 'ROWS', startIndex: rowIdx, endIndex: rowIdx + 1 } } }] }
+          });
+        }
+      }
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('CRM delete error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
