@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { google } = require('googleapis');
 
 const client = new Client({
@@ -82,8 +82,50 @@ function fmtDate(d) {
   return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
 }
 
+async function getOrCreateVACategory(guild) {
+  const existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === 'salons-va');
+  if (existing) return existing;
+  return guild.channels.create({
+    name: 'salons-va',
+    type: ChannelType.GuildCategory,
+    permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }]
+  });
+}
+
+async function createPrivateChannel(guild, member, ownerId) {
+  const channelName = (member.displayName || member.user.username)
+    .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || member.user.username.toLowerCase();
+  const exists = guild.channels.cache.find(c => c.name === channelName && c.parentId);
+  if (exists) return null;
+  const category = await getOrCreateVACategory(guild);
+  const channel = await guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: category.id,
+    permissionOverwrites: [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+    ]
+  });
+  await channel.send(`Bienvenue ${member} ! Envoie tes comptes Twitter/X ici (liens x.com ou twitter.com).`);
+  return channel;
+}
+
 client.on('ready', () => {
   console.log(`Bot connecte: ${client.user.tag}`);
+});
+
+client.on('guildMemberAdd', async (member) => {
+  if (member.user.bot) return;
+  try {
+    const ownerId = member.guild.ownerId;
+    const channel = await createPrivateChannel(member.guild, member, ownerId);
+    if (channel) console.log(`Salon prive cree: ${channel.name}`);
+  } catch (e) {
+    console.error('Erreur creation salon:', e.message);
+  }
 });
 
 client.on('messageCreate', async (message) => {
@@ -113,6 +155,16 @@ client.on('messageCreate', async (message) => {
           };
         }
         console.log(`${allMembers.size} membres, ${Object.keys(vaActivity).length} VAs (hors bots)`);
+        // Create private channels for members who don't have one
+        let channelsCreated = 0;
+        for (const [, member] of allMembers) {
+          if (member.user.bot) continue;
+          try {
+            const ch = await createPrivateChannel(message.guild, member, message.guild.ownerId);
+            if (ch) channelsCreated++;
+          } catch (e) { console.log(`Salon skip ${member.displayName}:`, e.message); }
+        }
+        if (channelsCreated > 0) console.log(`${channelsCreated} salons prives crees`);
       } catch (e) {
         console.log('GuildMembers fallback:', e.message);
       }
@@ -240,9 +292,10 @@ client.on('messageCreate', async (message) => {
 
       await dm.send(
         `Scan termine !\n` +
-        `${channelsScanned} salons | ${totalAdded} nouveau(x) compte(s)\n` +
+        `${channelsScanned} salons scannes | ${totalAdded} nouveau(x) compte(s)\n` +
         `${crmRows.length} VAs: ${active} actifs, ${inactive} inactifs, ${noResp} sans reponse\n` +
-        `${withAccounts} ont envoye leurs comptes | ${crmRows.length - withAccounts} n'ont pas encore repondu`
+        `${withAccounts} ont envoye leurs comptes | ${crmRows.length - withAccounts} n'ont pas encore repondu\n` +
+        `Salons prives: tous les VAs ont leur salon`
       );
     } catch (err) {
       console.error('Scan error:', err.message);
