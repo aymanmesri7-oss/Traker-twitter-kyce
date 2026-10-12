@@ -275,12 +275,6 @@ async function cleanDuplicates(guild) {
     }
   }
 
-  await guild.channels.fetch();
-  for (const [, cat] of salonCats) {
-    if (cat.id === VA_CATEGORY_ID) continue;
-    const remaining = guild.channels.cache.filter(c => c.parentId === cat.id).size;
-    if (remaining === 0) { await cat.delete(); console.log(`Categorie vide supprimee: ${cat.name}`); }
-  }
   console.log(`Clean: ${deleted} doublons supprimes`);
 }
 
