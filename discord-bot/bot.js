@@ -247,14 +247,10 @@ async function runFullScan(guild) {
 
 async function cleanDuplicates(guild) {
   await guild.channels.fetch();
-  const salonCats = guild.channels.cache.filter(c =>
-    c.type === ChannelType.GuildCategory && (c.id === VA_CATEGORY_ID || c.name.startsWith(VA_CATEGORY_BASE))
-  );
-  const catIds = new Set(salonCats.map(c => c.id));
-  const salonChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && catIds.has(c.parentId));
+  const allText = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
 
   const byName = {};
-  for (const [, ch] of salonChannels) {
+  for (const [, ch] of allText) {
     if (!byName[ch.name]) byName[ch.name] = [];
     byName[ch.name].push(ch);
   }
