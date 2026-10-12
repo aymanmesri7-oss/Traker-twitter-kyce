@@ -94,27 +94,27 @@ client.on('messageCreate', async (message) => {
     console.log('!scan lance');
 
     try {
-      // Phase 0: Fetch ALL guild members
-      const allMembers = await message.guild.members.fetch();
       const guildId = message.guild.id;
       const vaActivity = {};
-      const botId = client.user.id;
 
-      for (const [, member] of allMembers) {
-        if (member.user.bot) continue;
-        const vaName = (member.displayName || member.user.username)
-          .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || member.user.username.toLowerCase();
-        if (!vaName) continue;
-        vaActivity[vaName] = {
-          lastMessage: null,
-          firstMessage: null,
-          guildId,
-          messageCount: 0,
-          channelCounts: {},
-          joinedAt: member.joinedAt
-        };
+      // Phase 0: Fetch ALL guild members (needs Server Members Intent)
+      try {
+        const allMembers = await message.guild.members.fetch();
+        for (const [, member] of allMembers) {
+          if (member.user.bot) continue;
+          const vaName = (member.displayName || member.user.username)
+            .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || member.user.username.toLowerCase();
+          if (!vaName) continue;
+          vaActivity[vaName] = {
+            lastMessage: null, firstMessage: null, guildId,
+            messageCount: 0, channelCounts: {}, joinedAt: member.joinedAt
+          };
+        }
+        console.log(`${allMembers.size} membres, ${Object.keys(vaActivity).length} VAs (hors bots)`);
+      } catch (e) {
+        console.log('GuildMembers intent pas active, fallback sur messages:', e.message);
+        await message.reply('Note: Active "Server Members Intent" sur discord.com/developers pour voir TOUS les membres. Scan via messages...');
       }
-      console.log(`${allMembers.size} membres, ${Object.keys(vaActivity).length} VAs (hors bots)`);
 
       // Phase 1: Scan messages
       const channels = message.guild.channels.cache.filter(c => c.isTextBased() && !c.isThread());
@@ -224,7 +224,8 @@ client.on('messageCreate', async (message) => {
         return [name, status, accountCount, lastMsg, mainChannel, va.guildId, firstMsg, notes];
       });
 
-      try { await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `'_CRM'!A2:H1000` }); } catch {}
+      console.log(`Phase 3: ecriture CRM - ${crmRows.length} VAs`);
+      try { await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `'_CRM'!A2:H1000` }); } catch (e) { console.log('Clear CRM:', e.message); }
       if (crmRows.length > 0) {
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
@@ -232,6 +233,7 @@ client.on('messageCreate', async (message) => {
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: crmRows }
         });
+        console.log(`CRM ecrit: ${crmRows.length} lignes`);
       }
 
       const active = crmRows.filter(r => r[1] === 'Actif').length;
