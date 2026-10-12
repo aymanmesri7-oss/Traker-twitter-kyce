@@ -137,11 +137,15 @@ app.get('/api/crm', authMiddleware, async (req, res) => {
         const addMatch = notes.match(/Ajoute:(\d{2})\/(\d{2})\/(\d{4})/);
         if (addMatch) {
           const addDate = new Date(parseInt(addMatch[3]), parseInt(addMatch[2]) - 1, parseInt(addMatch[1]));
-          if (now - addDate.getTime() < FOUR_DAYS) s.warmup++;
-          else if (!acc.lastTweet) {
+          if (now - addDate.getTime() < FOUR_DAYS) {
+            s.warmup++;
+          } else if (!acc.lastTweet || acc.lastTweet === '') {
             if (!s.ready) s.ready = 0;
             s.ready++;
           }
+        } else if (!acc.lastTweet || acc.lastTweet === '') {
+          if (!s.ready) s.ready = 0;
+          s.ready++;
         }
       }
     }
@@ -157,12 +161,13 @@ app.get('/api/crm', authMiddleware, async (req, res) => {
     const noResponse = vas.filter(v => v.status === 'Pas de reponse').length;
     const totalAccounts = vas.reduce((s, v) => s + v.accountCount, 0);
 
+    const unknown = vas.filter(v => v.status === 'Unknown').length;
     const warmupTotal = vas.reduce((s, v) => s + (v.healthStats.warmup || 0), 0);
     const readyTotal = vas.reduce((s, v) => s + (v.healthStats.ready || 0), 0);
 
     res.json({
       vas,
-      stats: { total: vas.length, withAccounts, withoutAccounts: vas.length - withAccounts, active, inactive, noResponse, totalAccounts, warmupTotal, readyTotal }
+      stats: { total: vas.length, withAccounts, withoutAccounts: vas.length - withAccounts, active, inactive, noResponse, unknown, totalAccounts, warmupTotal, readyTotal }
     });
   } catch (err) {
     console.error('CRM error:', err);

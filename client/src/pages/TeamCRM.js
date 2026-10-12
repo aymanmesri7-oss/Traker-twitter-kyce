@@ -8,9 +8,9 @@ const statusConfig = {
 };
 
 function timeAgo(dateStr) {
-  if (!dateStr) return 'jamais';
+  if (!dateStr || dateStr === 'Non' || dateStr === '') return 'jamais';
   const parts = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
-  if (!parts) return dateStr;
+  if (!parts) return 'jamais';
   const d = new Date(parts[3], parts[2] - 1, parts[1], parts[4], parts[5]);
   const diff = Date.now() - d.getTime();
   const mins = Math.floor(diff / 60000);

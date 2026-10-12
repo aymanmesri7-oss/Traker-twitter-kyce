@@ -239,12 +239,14 @@ async function runFullScan(guild) {
     return [name, status, accountCount, va.lastMessage ? fmtDate(va.lastMessage) : '', mainChannel, va.guildId, va.firstMessage ? fmtDate(va.firstMessage) : '', va.messageCount > 0 ? `${va.messageCount} msgs` : 'jamais poste'];
   });
 
-  try { await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `'_CRM'!A2:H1000` }); } catch {}
+  console.log(`CRM: ${crmRows.length} lignes a ecrire`);
   if (crmRows.length > 0) {
+    try { await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `'_CRM'!A2:H1000` }); } catch (e) { console.log('Clear CRM:', e.message); }
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID, range: `'_CRM'!A2:H${crmRows.length + 1}`, valueInputOption: 'USER_ENTERED',
       requestBody: { values: crmRows }
     });
+    console.log('CRM ecrit OK');
   }
 
   const active = crmRows.filter(r => r[1] === 'Actif').length;
