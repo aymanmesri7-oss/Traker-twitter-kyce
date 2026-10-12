@@ -90,7 +90,9 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   if (message.content.trim() === '!scan') {
-    await message.reply('Scan complet en cours (comptes + CRM equipe)...');
+    try { await message.delete(); } catch {}
+    const dm = await message.author.createDM();
+    await dm.send('Scan complet en cours (comptes + CRM equipe)...');
     console.log('!scan lance');
 
     try {
@@ -236,7 +238,7 @@ client.on('messageCreate', async (message) => {
       const noResp = crmRows.filter(r => r[1] === 'Pas de reponse').length;
       const withAccounts = crmRows.filter(r => r[2] > 0).length;
 
-      await message.reply(
+      await dm.send(
         `Scan termine !\n` +
         `${channelsScanned} salons | ${totalAdded} nouveau(x) compte(s)\n` +
         `${crmRows.length} VAs: ${active} actifs, ${inactive} inactifs, ${noResp} sans reponse\n` +
@@ -244,7 +246,7 @@ client.on('messageCreate', async (message) => {
       );
     } catch (err) {
       console.error('Scan error:', err.message);
-      await message.reply('Erreur pendant le scan: ' + err.message);
+      await dm.send('Erreur pendant le scan: ' + err.message);
     }
     return;
   }
