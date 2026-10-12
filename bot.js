@@ -297,13 +297,10 @@ client.on('messageCreate', async (message) => {
       });
     }
 
-    let reply = '';
-    if (added.length > 0) reply += `Ajoute au dashboard Kyce : ${added.join(', ')}`;
-    if (skipped.length > 0) reply += `\nDeja enregistre : ${skipped.join(', ')}`;
-    await message.reply(reply.trim());
+    if (added.length > 0) console.log(`${vaName}: +${added.length} comptes`);
   } catch (err) {
     console.error('Erreur:', err.message);
-    await message.reply('Erreur lors de l\'ajout du compte.');
+    console.error('Erreur ajout compte:', err.message);
   }
 });
 
