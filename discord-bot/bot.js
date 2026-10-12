@@ -247,31 +247,26 @@ async function runFullScan(guild) {
 
 async function cleanDuplicates(guild) {
   await guild.channels.fetch();
-  const allText = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
-
-  const byName = {};
-  for (const [, ch] of allText) {
-    if (!byName[ch.name]) byName[ch.name] = [];
-    byName[ch.name].push(ch);
-  }
-
-  let deleted = 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  for (const [name, channels] of Object.entries(byName)) {
-    if (channels.length <= 1) continue;
-    channels.sort((a, b) => a.createdAt - b.createdAt);
-    for (let i = 1; i < channels.length; i++) {
-      if (channels[i].createdAt >= today) {
-        await channels[i].delete();
-        deleted++;
-        console.log(`Doublon supprime: ${name}`);
-      }
-    }
-  }
+  const allText = guild.channels.cache.filter(c =>
+    c.type === ChannelType.GuildText && c.createdAt >= today
+  );
 
-  console.log(`Clean: ${deleted} doublons supprimes`);
+  let deleted = 0;
+  for (const [, ch] of allText) {
+    try {
+      const msgs = await ch.messages.fetch({ limit: 1, after: '0' });
+      const first = msgs.first();
+      if (first && first.author.id === client.user.id && first.content.includes('Bienvenue')) {
+        console.log(`Suppression: ${ch.name}`);
+        await ch.delete();
+        deleted++;
+      }
+    } catch {}
+  }
+  console.log(`Clean: ${deleted} channels du bot supprimes`);
 }
 
 client.on('ready', async () => {
