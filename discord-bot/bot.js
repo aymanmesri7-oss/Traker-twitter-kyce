@@ -149,10 +149,7 @@ async function runFullScan(guild) {
         lastMessage: null, firstMessage: null, guildId,
         messageCount: 0, channelCounts: {}, joinedAt: member.joinedAt
       };
-      try {
-        const ch = await createPrivateChannel(guild, member, guild.ownerId);
-        if (ch) channelsCreated++;
-      } catch (e) { console.log(`Salon skip ${member.displayName}:`, e.message); }
+      // ponytail: channel creation disabled on startup, use !scan to create manually if needed
     }
     console.log(`${allMembers.size} membres, ${Object.keys(vaActivity).length} VAs, ${channelsCreated} salons crees`);
   } catch (e) { console.log('GuildMembers fallback:', e.message); }
@@ -268,6 +265,33 @@ client.on('guildMemberAdd', async (member) => {
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+
+  if (message.content.trim() === '!clean') {
+    try { await message.delete(); } catch {}
+    const dm = await message.author.createDM();
+    await dm.send('Suppression des salons perso en cours...');
+    try {
+      await message.guild.channels.fetch();
+      const cats = message.guild.channels.cache.filter(c =>
+        c.type === ChannelType.GuildCategory && (c.id === VA_CATEGORY_ID || c.name.startsWith(VA_CATEGORY_BASE))
+      );
+      let deleted = 0;
+      for (const [, cat] of cats) {
+        const children = message.guild.channels.cache.filter(c => c.parentId === cat.id);
+        for (const [, ch] of children) {
+          await ch.delete();
+          deleted++;
+        }
+        if (cat.id !== VA_CATEGORY_ID) {
+          await cat.delete();
+        }
+      }
+      await dm.send(`${deleted} salons supprimes.`);
+    } catch (err) {
+      await dm.send('Erreur: ' + err.message);
+    }
+    return;
+  }
 
   if (message.content.trim() === '!scan') {
     try { await message.delete(); } catch {}
