@@ -131,7 +131,9 @@ async function createPrivateChannel(guild, member, ownerId) {
       { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
     ]
   });
-  await channel.send(`Bienvenue ${member} ! Envoie tes comptes Twitter/X ici (liens x.com ou twitter.com).`);
+  const welcomeCh = guild.channels.cache.find(c => c.name.includes('tu-es-nouveau-regarde-ici'));
+  const welcomeLink = welcomeCh ? ` Regarde <#${welcomeCh.id}> pour commencer.` : '';
+  await channel.send(`Bienvenue dans Kyce Agency ${member} !${welcomeLink}`);
   return channel;
 }
 
