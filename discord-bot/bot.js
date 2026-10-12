@@ -104,8 +104,22 @@ async function createPrivateChannel(guild, member, ownerId) {
   return channel;
 }
 
-client.on('ready', () => {
+client.on('ready', async () => {
   console.log(`Bot connecte: ${client.user.tag}`);
+  for (const [, guild] of client.guilds.cache) {
+    try {
+      const members = await guild.members.fetch();
+      let created = 0;
+      for (const [, member] of members) {
+        if (member.user.bot) continue;
+        try {
+          const ch = await createPrivateChannel(guild, member, guild.ownerId);
+          if (ch) created++;
+        } catch {}
+      }
+      if (created > 0) console.log(`${created} salons prives crees au demarrage`);
+    } catch (e) { console.log('Auto-channels skip:', e.message); }
+  }
 });
 
 client.on('guildMemberAdd', async (member) => {
