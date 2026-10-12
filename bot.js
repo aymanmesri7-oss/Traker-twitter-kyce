@@ -6,7 +6,8 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -93,11 +94,33 @@ client.on('messageCreate', async (message) => {
     console.log('!scan lance');
 
     try {
+      // Phase 0: Fetch ALL guild members
+      const allMembers = await message.guild.members.fetch();
+      const guildId = message.guild.id;
+      const vaActivity = {};
+      const botId = client.user.id;
+
+      for (const [, member] of allMembers) {
+        if (member.user.bot) continue;
+        const vaName = (member.displayName || member.user.username)
+          .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || member.user.username.toLowerCase();
+        if (!vaName) continue;
+        vaActivity[vaName] = {
+          lastMessage: null,
+          firstMessage: null,
+          guildId,
+          messageCount: 0,
+          channelCounts: {},
+          joinedAt: member.joinedAt
+        };
+      }
+      console.log(`${allMembers.size} membres, ${Object.keys(vaActivity).length} VAs (hors bots)`);
+
+      // Phase 1: Scan messages
       const channels = message.guild.channels.cache.filter(c => c.isTextBased() && !c.isThread());
       console.log(`${channels.size} salons a scanner`);
 
       const vaHandles = {};
-      const vaActivity = {};
       let channelsScanned = 0;
 
       for (const [, channel] of channels) {
@@ -115,23 +138,24 @@ client.on('messageCreate', async (message) => {
           for (const [, msg] of msgs) {
             if (msg.author.bot) continue;
 
-            const vaName = msg.author.displayName
+            const vaName = (msg.member?.displayName || msg.author.displayName || msg.author.username)
               .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || msg.author.username.toLowerCase();
 
             if (!vaActivity[vaName]) {
               vaActivity[vaName] = {
                 lastMessage: msg.createdAt,
                 firstMessage: msg.createdAt,
-                guildId: message.guild.id,
+                guildId,
                 messageCount: 0,
-                channelCounts: {}
+                channelCounts: {},
+                joinedAt: null
               };
             }
             const va = vaActivity[vaName];
             va.messageCount++;
             va.channelCounts[channel.id] = (va.channelCounts[channel.id] || 0) + 1;
-            if (msg.createdAt > va.lastMessage) va.lastMessage = msg.createdAt;
-            if (msg.createdAt < va.firstMessage) va.firstMessage = msg.createdAt;
+            if (!va.lastMessage || msg.createdAt > va.lastMessage) va.lastMessage = msg.createdAt;
+            if (!va.firstMessage || msg.createdAt < va.firstMessage) va.firstMessage = msg.createdAt;
 
             const handles = extractHandles(msg.content);
             if (handles.length === 0) continue;
@@ -180,17 +204,24 @@ client.on('messageCreate', async (message) => {
       const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
       const crmRows = Object.entries(vaActivity).map(([name, va]) => {
-        const elapsed = now - va.lastMessage;
         let status;
-        if (elapsed < TWO_DAYS) status = 'Actif';
-        else if (elapsed < SEVEN_DAYS) status = 'Inactif';
-        else status = 'Pas de reponse';
+        if (!va.lastMessage) {
+          status = 'Pas de reponse';
+        } else {
+          const elapsed = now - va.lastMessage;
+          if (elapsed < TWO_DAYS) status = 'Actif';
+          else if (elapsed < SEVEN_DAYS) status = 'Inactif';
+          else status = 'Pas de reponse';
+        }
 
         const mainChannel = Object.entries(va.channelCounts)
           .sort((a, b) => b[1] - a[1])[0]?.[0] || '';
         const accountCount = vaHandles[name] ? vaHandles[name].size : 0;
+        const lastMsg = va.lastMessage ? fmtDate(va.lastMessage) : '';
+        const firstMsg = va.firstMessage ? fmtDate(va.firstMessage) : '';
+        const notes = va.messageCount > 0 ? `${va.messageCount} msgs` : 'jamais poste';
 
-        return [name, status, accountCount, fmtDate(va.lastMessage), mainChannel, va.guildId, fmtDate(va.firstMessage), `${va.messageCount} msgs`];
+        return [name, status, accountCount, lastMsg, mainChannel, va.guildId, firstMsg, notes];
       });
 
       try { await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `'_CRM'!A2:H1000` }); } catch {}
