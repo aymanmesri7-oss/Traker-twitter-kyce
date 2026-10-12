@@ -245,9 +245,31 @@ async function runFullScan(guild) {
   return { channelsScanned, totalAdded, crmRows, active, inactive, noResp, withAccounts };
 }
 
+async function cleanDuplicates(guild) {
+  await guild.channels.fetch();
+  const originalNames = new Set(
+    guild.channels.cache.filter(c => c.parentId === VA_CATEGORY_ID).map(c => c.name)
+  );
+  const extraCats = guild.channels.cache.filter(c =>
+    c.type === ChannelType.GuildCategory && c.id !== VA_CATEGORY_ID && c.name.startsWith(VA_CATEGORY_BASE)
+  );
+  let deleted = 0;
+  for (const [, cat] of extraCats) {
+    const children = guild.channels.cache.filter(c => c.parentId === cat.id);
+    for (const [, ch] of children) {
+      if (originalNames.has(ch.name)) { await ch.delete(); deleted++; }
+    }
+    await guild.channels.fetch();
+    const remaining = guild.channels.cache.filter(c => c.parentId === cat.id).size;
+    if (remaining === 0) await cat.delete();
+  }
+  if (deleted > 0) console.log(`${deleted} doublons supprimes`);
+}
+
 client.on('ready', async () => {
   console.log(`Bot connecte: ${client.user.tag}`);
   for (const [, guild] of client.guilds.cache) {
+    try { await cleanDuplicates(guild); } catch (e) { console.error('Clean erreur:', e.message); }
     try { await runFullScan(guild); } catch (e) { console.error('Scan auto erreur:', e.message); }
   }
 });
