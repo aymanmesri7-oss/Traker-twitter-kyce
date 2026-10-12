@@ -247,23 +247,41 @@ async function runFullScan(guild) {
 
 async function cleanDuplicates(guild) {
   await guild.channels.fetch();
-  const originalNames = new Set(
-    guild.channels.cache.filter(c => c.parentId === VA_CATEGORY_ID).map(c => c.name)
+  const salonCats = guild.channels.cache.filter(c =>
+    c.type === ChannelType.GuildCategory && (c.id === VA_CATEGORY_ID || c.name.startsWith(VA_CATEGORY_BASE))
   );
-  const extraCats = guild.channels.cache.filter(c =>
-    c.type === ChannelType.GuildCategory && c.id !== VA_CATEGORY_ID && c.name.startsWith(VA_CATEGORY_BASE)
-  );
-  let deleted = 0;
-  for (const [, cat] of extraCats) {
-    const children = guild.channels.cache.filter(c => c.parentId === cat.id);
-    for (const [, ch] of children) {
-      if (originalNames.has(ch.name)) { await ch.delete(); deleted++; }
-    }
-    await guild.channels.fetch();
-    const remaining = guild.channels.cache.filter(c => c.parentId === cat.id).size;
-    if (remaining === 0) await cat.delete();
+  const catIds = new Set(salonCats.map(c => c.id));
+  const salonChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && catIds.has(c.parentId));
+
+  const byName = {};
+  for (const [, ch] of salonChannels) {
+    if (!byName[ch.name]) byName[ch.name] = [];
+    byName[ch.name].push(ch);
   }
-  if (deleted > 0) console.log(`${deleted} doublons supprimes`);
+
+  let deleted = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (const [name, channels] of Object.entries(byName)) {
+    if (channels.length <= 1) continue;
+    channels.sort((a, b) => a.createdAt - b.createdAt);
+    for (let i = 1; i < channels.length; i++) {
+      if (channels[i].createdAt >= today) {
+        await channels[i].delete();
+        deleted++;
+        console.log(`Doublon supprime: ${name}`);
+      }
+    }
+  }
+
+  await guild.channels.fetch();
+  for (const [, cat] of salonCats) {
+    if (cat.id === VA_CATEGORY_ID) continue;
+    const remaining = guild.channels.cache.filter(c => c.parentId === cat.id).size;
+    if (remaining === 0) { await cat.delete(); console.log(`Categorie vide supprimee: ${cat.name}`); }
+  }
+  console.log(`Clean: ${deleted} doublons supprimes`);
 }
 
 client.on('ready', async () => {
