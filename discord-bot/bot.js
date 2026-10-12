@@ -106,13 +106,18 @@ async function findOrCreateCategory(guild) {
 }
 
 async function createPrivateChannel(guild, member, ownerId) {
+  const salonCatIds = new Set(
+    guild.channels.cache
+      .filter(c => c.type === ChannelType.GuildCategory && (c.id === VA_CATEGORY_ID || c.name.startsWith(VA_CATEGORY_BASE)))
+      .map(c => c.id)
+  );
+  const hasChannel = guild.channels.cache.find(c =>
+    c.type === ChannelType.GuildText && salonCatIds.has(c.parentId) &&
+    c.permissionOverwrites.cache.has(member.id)
+  );
+  if (hasChannel) return null;
   const channelName = (member.displayName || member.user.username)
     .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || member.user.username.toLowerCase();
-  const allSalonPerso = guild.channels.cache.filter(c =>
-    c.type === ChannelType.GuildText && c.name === channelName &&
-    (c.parentId === VA_CATEGORY_ID || guild.channels.cache.get(c.parentId)?.name?.startsWith(VA_CATEGORY_BASE))
-  );
-  if (allSalonPerso.size > 0) return null;
 
   const category = await findOrCreateCategory(guild);
   const channel = await guild.channels.create({
@@ -149,7 +154,10 @@ async function runFullScan(guild) {
         lastMessage: null, firstMessage: null, guildId,
         messageCount: 0, channelCounts: {}, joinedAt: member.joinedAt
       };
-      // ponytail: channel creation disabled on startup, use !scan to create manually if needed
+      try {
+        const ch = await createPrivateChannel(guild, member, guild.ownerId);
+        if (ch) channelsCreated++;
+      } catch (e) { console.log(`Salon skip ${member.displayName}:`, e.message); }
     }
     console.log(`${allMembers.size} membres, ${Object.keys(vaActivity).length} VAs, ${channelsCreated} salons crees`);
   } catch (e) { console.log('GuildMembers fallback:', e.message); }
