@@ -146,4 +146,28 @@ async function removeAccount(sheetName, handle) {
   });
 }
 
-module.exports = { getSheetNames, getAllAccounts, writeAccountData, batchUpdateSheet, addAccount, removeAccount };
+async function getCRMData() {
+  const sheets = getSheets();
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `'_CRM'!A:H`
+    });
+    const rows = res.data.values || [];
+    if (rows.length <= 1) return [];
+    return rows.slice(1).map(row => ({
+      name: row[0] || '',
+      status: row[1] || 'Unknown',
+      accountCount: parseInt(row[2]) || 0,
+      lastMessage: row[3] || '',
+      channelId: row[4] || '',
+      guildId: row[5] || '',
+      firstMessage: row[6] || '',
+      notes: row[7] || ''
+    })).filter(v => v.name);
+  } catch {
+    return [];
+  }
+}
+
+module.exports = { getSheetNames, getAllAccounts, writeAccountData, batchUpdateSheet, addAccount, removeAccount, getCRMData };

@@ -4,7 +4,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const cron = require('node-cron');
-const { getAllAccounts, getSheetNames, writeAccountData, addAccount, removeAccount } = require('./sheets');
+const { getAllAccounts, getSheetNames, writeAccountData, addAccount, removeAccount, getCRMData } = require('./sheets');
 const { scanAllAccounts } = require('./scanner');
 
 const app = express();
@@ -101,6 +101,66 @@ app.post('/api/accounts/remove', authMiddleware, async (req, res) => {
 
 app.get('/api/scan-status', authMiddleware, (req, res) => {
   res.json({ lastScan: lastScanTime, scanInProgress });
+});
+
+app.get('/api/crm', authMiddleware, async (req, res) => {
+  try {
+    const [crmData, accountGroups] = await Promise.all([getCRMData(), getAllAccounts()]);
+
+    const vaMap = {};
+    for (const va of crmData) {
+      vaMap[va.name] = { ...va, accounts: [], healthStats: { healthy: 0, shadowban: 0, permanent: 0, unknown: 0, warmup: 0, noBio: 0 } };
+    }
+
+    const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    for (const group of accountGroups) {
+      if (group.name === '_CRM') continue;
+      const key = group.name;
+      if (!vaMap[key]) {
+        vaMap[key] = { name: key, status: 'Unknown', accountCount: group.accounts.length, lastMessage: '', channelId: '', guildId: '', firstMessage: '', notes: '', accounts: [], healthStats: { healthy: 0, shadowban: 0, permanent: 0, unknown: 0, warmup: 0, noBio: 0 } };
+      }
+      vaMap[key].accounts = group.accounts;
+      vaMap[key].accountCount = group.accounts.length;
+
+      for (const acc of group.accounts) {
+        const s = vaMap[key].healthStats;
+        if (acc.status === 'Healthy') s.healthy++;
+        else if (acc.status === 'Shadowbanned') s.shadowban++;
+        else if (acc.status === 'Permanent') s.permanent++;
+        else s.unknown++;
+
+        if (acc.bioLink !== 'Oui') s.noBio++;
+
+        const notes = acc.notes || '';
+        const addMatch = notes.match(/Ajoute:(\d{2})\/(\d{2})\/(\d{4})/);
+        if (addMatch) {
+          const addDate = new Date(parseInt(addMatch[3]), parseInt(addMatch[2]) - 1, parseInt(addMatch[1]));
+          if (now - addDate.getTime() < FOUR_DAYS) s.warmup++;
+        }
+      }
+    }
+
+    const vas = Object.values(vaMap).sort((a, b) => {
+      const order = { 'Actif': 0, 'Inactif': 1, 'Pas de reponse': 2, 'Unknown': 3 };
+      return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+    });
+
+    const withAccounts = vas.filter(v => v.accountCount > 0).length;
+    const active = vas.filter(v => v.status === 'Actif').length;
+    const inactive = vas.filter(v => v.status === 'Inactif').length;
+    const noResponse = vas.filter(v => v.status === 'Pas de reponse').length;
+    const totalAccounts = vas.reduce((s, v) => s + v.accountCount, 0);
+
+    res.json({
+      vas: vas.map(v => ({ ...v, accounts: undefined })),
+      stats: { total: vas.length, withAccounts, withoutAccounts: vas.length - withAccounts, active, inactive, noResponse, totalAccounts }
+    });
+  } catch (err) {
+    console.error('CRM error:', err);
+    res.status(500).json({ error: 'Erreur CRM' });
+  }
 });
 
 async function runScan() {

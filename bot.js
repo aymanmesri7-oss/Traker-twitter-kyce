@@ -15,11 +15,7 @@ const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 function getSheets() {
   let raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   let key;
-  try {
-    key = JSON.parse(raw);
-  } catch {
-    key = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
-  }
+  try { key = JSON.parse(raw); } catch { key = JSON.parse(Buffer.from(raw, 'base64').toString('utf8')); }
   const auth = new google.auth.GoogleAuth({
     credentials: key,
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
@@ -50,7 +46,7 @@ async function ensureVATab(sheets, vaName, existingTabs) {
     spreadsheetId: SHEET_ID,
     range: `'${vaName}'!A1:H1`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [['Handle', 'Statut', 'Dernier tweet', 'Lien bio', 'Followers', 'Abonnements', 'Dernière vérification', 'Notes']] }
+    requestBody: { values: [['Handle', 'Statut', 'Dernier tweet', 'Lien bio', 'Followers', 'Abonnements', 'Derniere verification', 'Notes']] }
   });
   existingTabs.push(vaName);
 }
@@ -62,23 +58,46 @@ async function getExistingHandles(sheets, vaName) {
   } catch { return []; }
 }
 
+async function ensureCRMTab(sheets, existingTabs) {
+  if (existingTabs.includes('_CRM')) return;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: { requests: [{ addSheet: { properties: { title: '_CRM' } } }] }
+  });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `'_CRM'!A1:H1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [['VA', 'Statut', 'Comptes', 'Dernier message', 'Channel ID', 'Guild ID', 'Premier message', 'Notes']] }
+  });
+  existingTabs.push('_CRM');
+}
+
+function fmtDate(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
+}
+
 client.on('ready', () => {
-  console.log(`Bot connecté: ${client.user.tag}`);
+  console.log(`Bot connecte: ${client.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   if (message.content.trim() === '!scan') {
-    await message.reply('🔍 Scan de tous les salons en cours...');
-    console.log('!scan lancé');
+    await message.reply('Scan complet en cours (comptes + CRM equipe)...');
+    console.log('!scan lance');
 
     try {
       const channels = message.guild.channels.cache.filter(c => c.isTextBased() && !c.isThread());
-      console.log(`${channels.size} salons à scanner`);
+      console.log(`${channels.size} salons a scanner`);
 
-      // Phase 1: collect all handles from all channels (no API calls)
-      const vaHandles = {}; // { vaName: Set of handles }
+      const vaHandles = {};
+      const vaActivity = {};
       let channelsScanned = 0;
 
       for (const [, channel] of channels) {
@@ -95,11 +114,27 @@ client.on('messageCreate', async (message) => {
 
           for (const [, msg] of msgs) {
             if (msg.author.bot) continue;
-            const handles = extractHandles(msg.content);
-            if (handles.length === 0) continue;
 
             const vaName = msg.author.displayName
               .toLowerCase().replace(/[^a-z0-9-]/g, '').substring(0, 30) || msg.author.username.toLowerCase();
+
+            if (!vaActivity[vaName]) {
+              vaActivity[vaName] = {
+                lastMessage: msg.createdAt,
+                firstMessage: msg.createdAt,
+                guildId: message.guild.id,
+                messageCount: 0,
+                channelCounts: {}
+              };
+            }
+            const va = vaActivity[vaName];
+            va.messageCount++;
+            va.channelCounts[channel.id] = (va.channelCounts[channel.id] || 0) + 1;
+            if (msg.createdAt > va.lastMessage) va.lastMessage = msg.createdAt;
+            if (msg.createdAt < va.firstMessage) va.firstMessage = msg.createdAt;
+
+            const handles = extractHandles(msg.content);
+            if (handles.length === 0) continue;
 
             if (!vaHandles[vaName]) vaHandles[vaName] = new Set();
             handles.forEach(h => vaHandles[vaName].add(h.toLowerCase()));
@@ -108,12 +143,11 @@ client.on('messageCreate', async (message) => {
           lastId = msgs.last().id;
           if (msgs.size < 100) break;
         }
-        console.log(`Salon ${channelsScanned}/${channels.size} scanné`);
+        console.log(`Salon ${channelsScanned}/${channels.size} scanne`);
       }
 
-      console.log(`Phase 1 finie: ${Object.keys(vaHandles).length} VAs, ${Object.values(vaHandles).reduce((a, s) => a + s.size, 0)} handles trouvés`);
+      console.log(`Phase 1: ${Object.keys(vaActivity).length} VAs, ${Object.keys(vaHandles).length} avec handles`);
 
-      // Phase 2: write to Google Sheets (batch per VA)
       const sheets = getSheets();
       const tabsRes = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
       const existingTabs = tabsRes.data.sheets.map(s => s.properties.title);
@@ -125,7 +159,9 @@ client.on('messageCreate', async (message) => {
         const newHandles = [...handleSet].filter(h => !existing.includes(h));
 
         if (newHandles.length > 0) {
-          const rows = newHandles.map(h => [h, 'Unknown', '', 'Non', 0, 0, '', '']);
+          const now = new Date();
+          const tag = `Ajoute:${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+          const rows = newHandles.map(h => [h, 'Unknown', '', 'Non', 0, 0, '', tag]);
           await sheets.spreadsheets.values.append({
             spreadsheetId: SHEET_ID,
             range: `'${vaName}'!A:H`,
@@ -137,11 +173,50 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      console.log(`Scan terminé: ${channelsScanned} salons, ${totalAdded} ajoutés`);
-      await message.reply(`✅ Scan terminé ! ${channelsScanned} salons scannés, ${totalAdded} nouveau(x) compte(s) ajouté(s).`);
+      // Phase 3: CRM data
+      await ensureCRMTab(sheets, existingTabs);
+      const now = new Date();
+      const TWO_DAYS = 2 * 24 * 60 * 60 * 1000;
+      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+      const crmRows = Object.entries(vaActivity).map(([name, va]) => {
+        const elapsed = now - va.lastMessage;
+        let status;
+        if (elapsed < TWO_DAYS) status = 'Actif';
+        else if (elapsed < SEVEN_DAYS) status = 'Inactif';
+        else status = 'Pas de reponse';
+
+        const mainChannel = Object.entries(va.channelCounts)
+          .sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+        const accountCount = vaHandles[name] ? vaHandles[name].size : 0;
+
+        return [name, status, accountCount, fmtDate(va.lastMessage), mainChannel, va.guildId, fmtDate(va.firstMessage), `${va.messageCount} msgs`];
+      });
+
+      try { await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `'_CRM'!A2:H1000` }); } catch {}
+      if (crmRows.length > 0) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: `'_CRM'!A2:H${crmRows.length + 1}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: crmRows }
+        });
+      }
+
+      const active = crmRows.filter(r => r[1] === 'Actif').length;
+      const inactive = crmRows.filter(r => r[1] === 'Inactif').length;
+      const noResp = crmRows.filter(r => r[1] === 'Pas de reponse').length;
+      const withAccounts = crmRows.filter(r => r[2] > 0).length;
+
+      await message.reply(
+        `Scan termine !\n` +
+        `${channelsScanned} salons | ${totalAdded} nouveau(x) compte(s)\n` +
+        `${crmRows.length} VAs: ${active} actifs, ${inactive} inactifs, ${noResp} sans reponse\n` +
+        `${withAccounts} ont envoye leurs comptes | ${crmRows.length - withAccounts} n'ont pas encore repondu`
+      );
     } catch (err) {
       console.error('Scan error:', err.message);
-      await message.reply('❌ Erreur pendant le scan: ' + err.message);
+      await message.reply('Erreur pendant le scan: ' + err.message);
     }
     return;
   }
@@ -171,7 +246,9 @@ client.on('messageCreate', async (message) => {
     }
 
     if (added.length > 0) {
-      const rows = added.map(h => [h, 'Unknown', '', 'Non', 0, 0, '', '']);
+      const now = new Date();
+      const tag = `Ajoute:${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+      const rows = added.map(h => [h, 'Unknown', '', 'Non', 0, 0, '', tag]);
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: `'${vaName}'!A:H`,
@@ -181,12 +258,12 @@ client.on('messageCreate', async (message) => {
     }
 
     let reply = '';
-    if (added.length > 0) reply += `✅ Ajouté au dashboard Kyce : ${added.join(', ')}`;
-    if (skipped.length > 0) reply += `\n⚠️ Déjà enregistré : ${skipped.join(', ')}`;
+    if (added.length > 0) reply += `Ajoute au dashboard Kyce : ${added.join(', ')}`;
+    if (skipped.length > 0) reply += `\nDeja enregistre : ${skipped.join(', ')}`;
     await message.reply(reply.trim());
   } catch (err) {
     console.error('Erreur:', err.message);
-    await message.reply('❌ Erreur lors de l\'ajout du compte.');
+    await message.reply('Erreur lors de l\'ajout du compte.');
   }
 });
 
