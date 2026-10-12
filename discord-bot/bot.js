@@ -111,6 +111,7 @@ async function runFullScan(guild) {
 
   // Fetch all members + create missing channels
   try {
+    await guild.channels.fetch();
     const allMembers = await guild.members.fetch();
     let channelsCreated = 0;
     for (const [, member] of allMembers) {
@@ -125,7 +126,7 @@ async function runFullScan(guild) {
       try {
         const ch = await createPrivateChannel(guild, member, guild.ownerId);
         if (ch) channelsCreated++;
-      } catch {}
+      } catch (e) { console.log(`Salon skip ${member.displayName}:`, e.message); }
     }
     console.log(`${allMembers.size} membres, ${Object.keys(vaActivity).length} VAs, ${channelsCreated} salons crees`);
   } catch (e) { console.log('GuildMembers fallback:', e.message); }
