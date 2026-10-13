@@ -1,15 +1,14 @@
 const https = require('https');
 const { getAllAccounts, batchUpdateSheet } = require('./sheets');
 
-function httpGet(hostname, path) {
+function httpGet(hostname, path, port) {
+  const parts = hostname.split(':');
+  const host = parts[0];
+  const p = port || (parts[1] ? parseInt(parts[1]) : 443);
   return new Promise((resolve, reject) => {
     const req = https.get({
-      hostname,
-      path,
-      headers: {
-        'User-Agent': 'Twitterbot/1.0',
-        'Accept': 'text/html,application/xhtml+xml'
-      },
+      hostname: host, port: p, path,
+      headers: { 'User-Agent': 'Twitterbot/1.0', 'Accept': 'text/html,application/xhtml+xml' },
       timeout: 15000
     }, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302 && res.headers.location) {
@@ -109,17 +108,16 @@ async function scrapeProfile(handle) {
 async function checkShadowban(handle) {
   const cleanHandle = handle.replace('@', '');
   try {
-    // Search test: if a search for "from:handle" returns no results but profile exists, likely shadowbanned
-    const searchRes = await httpGet('x.com', '/search?q=from%3A' + cleanHandle + '&src=typed_query&f=live');
-
-    if (searchRes.status === 200) {
-      // If we can see their profile but search returns nothing, could be shadowban
-      if (searchRes.data.includes('No results') || searchRes.data.includes('没有结果')) {
-        return 'Shadowbanned';
-      }
+    const res = await httpGet('shadowban-api.yuzurisa.com:444', '/' + cleanHandle);
+    if (res.status === 200) {
+      const data = JSON.parse(res.data);
+      if (!data.profile || !data.profile.exists) return 'Permanent';
+      if (data.profile.suspended) return 'Permanent';
+      const t = data.tests || {};
+      if (t.ghost?.ban || t.more_replies?.ban || t.search === false || t.typeahead === false) return 'Shadowbanned';
     }
   } catch (err) {
-    // Search check failed, can't determine shadowban
+    console.error(`  Shadowban check error for ${cleanHandle}: ${err.message}`);
   }
   return null;
 }
@@ -143,12 +141,19 @@ async function scanAllAccounts() {
       try {
         const data = await scrapeProfile(account.handle);
 
+        let finalStatus = data.status;
+        if (finalStatus === 'Healthy') {
+          await new Promise(r => setTimeout(r, 1000));
+          const sbResult = await checkShadowban(account.handle);
+          if (sbResult) finalStatus = sbResult;
+        }
+
         const now = new Date();
         const lastCheck = `${now.toLocaleDateString('fr-FR')} ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
 
         updatedAccounts.push({
           handle: account.handle,
-          status: data.status,
+          status: finalStatus,
           lastTweet: data.lastTweet || account.lastTweet,
           bioLink: data.bioLink,
           followers: data.followers || account.followers,
@@ -157,7 +162,7 @@ async function scanAllAccounts() {
           notes: account.notes
         });
 
-        console.log(`  -> ${data.status} | Bio: ${data.bioLink} | Posts: ${data.posts || 'N/A'} | Last tweet: ${data.lastTweet || 'N/A'}`);
+        console.log(`  -> ${finalStatus} | Bio: ${data.bioLink} | Posts: ${data.posts || 'N/A'} | Last tweet: ${data.lastTweet || 'N/A'}`);
       } catch (err) {
         console.error(`  -> Error: ${err.message}`);
         updatedAccounts.push(account);
