@@ -50,9 +50,6 @@ function Filters({ search, onSearch, activeFilter, onFilter, sortBy, onSort, vie
       <button style={filterBtnStyle(activeFilter === 'nobio')} onClick={() => toggleFilter('nobio')}>
         Sans lien bio
       </button>
-      <button style={filterBtnStyle(activeFilter === 'warmup')} onClick={() => toggleFilter('warmup')}>
-        Warm-up
-      </button>
       <button style={filterBtnStyle(viewMode === 'cards')} onClick={() => onViewMode(viewMode === 'cards' ? 'list' : 'cards')}>
         Cards
       </button>

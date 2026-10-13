@@ -5,7 +5,6 @@ const cards = [
   { key: 'healthy', label: 'HEALTHY', color: '#22c55e', border: '#16a34a', subKey: 'healthy', pctOf: 'total', suffix: 'OK' },
   { key: 'shadowban', label: 'SHADOWBAN', color: '#f97316', border: '#ea580c', subKey: 'shadowban', suffix: 'recoverable' },
   { key: 'permanent', label: 'PERMANENT', color: '#ef4444', border: '#dc2626', subKey: 'permanent', suffix: 'suspended / ban', icon: true },
-  { key: 'warmup', label: 'WARM-UP', color: '#a78bfa', border: '#8b5cf6', subKey: 'warmup', suffix: 'en rodage (<4j)' },
   { key: 'inactive', label: 'INACTIVE 7D+', color: '#71717a', border: '#52525b', subKey: 'inactive', suffix2: 'neverTweeted', suffixLabel: 'never tweeted' },
 ];
 

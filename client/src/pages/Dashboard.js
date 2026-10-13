@@ -56,16 +56,7 @@ function Dashboard({ onLogout }) {
     const neverTweeted = allAccounts.filter(a => !a.lastTweet).length;
     const noBioLink = allAccounts.filter(a => a.bioLink !== 'Oui').length;
 
-    const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
-    const warmup = allAccounts.filter(a => {
-      const notes = a.notes || '';
-      const m = notes.match(/Ajoute:(\d{2})\/(\d{2})\/(\d{4})/);
-      if (!m) return false;
-      const addDate = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
-      return (Date.now() - addDate.getTime()) < FOUR_DAYS;
-    }).length;
-
-    return { total, healthy, shadowban, permanent, inactive, neverTweeted, noBioLink, warmup };
+    return { total, healthy, shadowban, permanent, inactive, neverTweeted, noBioLink };
   }, [allAccounts]);
 
   const filteredGroups = useMemo(() => {
@@ -85,14 +76,6 @@ function Dashboard({ onLogout }) {
         accounts = accounts.filter(a => !a.lastTweet || new Date(a.lastTweet) < sevenDaysAgo);
       } else if (activeFilter === 'nobio') {
         accounts = accounts.filter(a => a.bioLink !== 'Oui');
-      } else if (activeFilter === 'warmup') {
-        const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
-        accounts = accounts.filter(a => {
-          const m = (a.notes || '').match(/Ajoute:(\d{2})\/(\d{2})\/(\d{4})/);
-          if (!m) return false;
-          const addDate = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
-          return (Date.now() - addDate.getTime()) < FOUR_DAYS;
-        });
       }
 
       if (sortBy === 'handle') {
