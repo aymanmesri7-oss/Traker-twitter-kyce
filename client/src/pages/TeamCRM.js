@@ -22,8 +22,6 @@ function HealthBar({ stats }) {
 
   const segments = [
     { count: stats.healthy, color: '#22c55e', label: 'OK' },
-    { count: stats.warmup, color: '#a78bfa', label: 'Warm-up' },
-    { count: stats.ready, color: '#fbbf24', label: 'Pret' },
     { count: stats.shadowban, color: '#f97316', label: 'SB' },
     { count: stats.permanent, color: '#ef4444', label: 'Ban' },
     { count: stats.unknown, color: '#78716c', label: '?' }
@@ -48,27 +46,15 @@ function HealthBar({ stats }) {
 function VACard({ va, onDelete }) {
   const valid = va.healthStats?.valid || 0;
   const banned = (va.healthStats?.permanent || 0) + (va.healthStats?.shadowban || 0);
-  const warmup = va.healthStats?.warmup || 0;
-  const ready = va.healthStats?.ready || 0;
 
   let borderColor = '#3f3f46';
   let tagLabel = `${valid} valides`;
   let tagColor = '#71717a';
   let tagBg = '#1e1e22';
 
-  if (valid >= 5 && ready > 0) {
-    borderColor = '#fbbf24';
-    tagLabel = `${ready} pret a poster`;
-    tagColor = '#fbbf24';
-    tagBg = '#422006';
-  } else if (valid >= 5 && warmup > 0) {
-    borderColor = '#a78bfa';
-    tagLabel = `Warm-up (${warmup})`;
-    tagColor = '#a78bfa';
-    tagBg = '#2e1065';
-  } else if (valid >= 5) {
+  if (valid >= 5) {
     borderColor = '#22c55e';
-    tagLabel = '5 valides';
+    tagLabel = `${valid} valides`;
     tagColor = '#22c55e';
     tagBg = '#052e16';
   } else if (valid > 0) {
@@ -176,9 +162,6 @@ function TeamCRM() {
     else if (filter === '3') vas = vas.filter(v => (v.healthStats?.valid || 0) === 3);
     else if (filter === '4') vas = vas.filter(v => (v.healthStats?.valid || 0) === 4);
     else if (filter === '5') vas = vas.filter(v => (v.healthStats?.valid || 0) >= 5);
-    else if (filter === 'warmup') vas = vas.filter(v => (v.healthStats?.warmup || 0) > 0);
-    else if (filter === 'ready') vas = vas.filter(v => (v.healthStats?.ready || 0) > 0);
-    else if (filter === 'posted') vas = vas.filter(v => (v.healthStats?.valid || 0) >= 5 && (v.healthStats?.warmup || 0) === 0 && (v.healthStats?.ready || 0) === 0);
 
     return vas;
   }, [data, search, filter]);
@@ -227,8 +210,6 @@ function TeamCRM() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
         <Stat label="TOTAL VAs" value={st.total} color="#3b82f6" sub="dans l'equipe" />
         <Stat label="COMPTES VALIDES" value={st.totalValid} color="#22c55e" sub={`${st.totalBanned} bans exclus`} />
-        <Stat label="WARM-UP" value={st.warmupTotal} color="#a78bfa" sub="comptes < 4 jours" />
-        <Stat label="PRET A POSTER" value={st.readyTotal} color="#fbbf24" sub="apres warm-up" />
         <Stat label="5 COMPTES+" value={st.fivePlus} color="#06b6d4" sub="VAs prets" />
         <Stat label="TOTAL COMPTES" value={st.totalAccounts} color="#78716c" sub="tous comptes" />
       </div>
@@ -247,15 +228,6 @@ function TeamCRM() {
         </div>
       </div>
 
-      {/* Pipeline: statut */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ color: '#52525b', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 8 }}>PIPELINE</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          <Btn k="warmup" label="En warm-up" count={data.vas.filter(v => (v.healthStats?.warmup || 0) > 0).length} color="#a78bfa" />
-          <Btn k="ready" label="Doit poster" count={data.vas.filter(v => (v.healthStats?.ready || 0) > 0).length} color="#fbbf24" />
-          <Btn k="posted" label="A poste" count={data.vas.filter(v => (v.healthStats?.valid || 0) >= 5 && (v.healthStats?.warmup || 0) === 0 && (v.healthStats?.ready || 0) === 0).length} color="#22c55e" />
-        </div>
-      </div>
 
       {/* Search */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#18181b', borderRadius: 12, padding: '8px 14px', maxWidth: 300, marginBottom: 12 }}>

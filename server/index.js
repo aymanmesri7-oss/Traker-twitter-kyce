@@ -109,17 +109,14 @@ app.get('/api/crm', authMiddleware, async (req, res) => {
 
     const vaMap = {};
     for (const va of crmData) {
-      vaMap[va.name] = { ...va, accounts: [], healthStats: { healthy: 0, shadowban: 0, permanent: 0, unknown: 0, warmup: 0, ready: 0, noBio: 0, valid: 0 } };
+      vaMap[va.name] = { ...va, accounts: [], healthStats: { healthy: 0, shadowban: 0, permanent: 0, unknown: 0, noBio: 0, valid: 0 } };
     }
-
-    const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
-    const now = Date.now();
 
     for (const group of accountGroups) {
       if (group.name === '_CRM') continue;
       const key = group.name;
       if (!vaMap[key]) {
-        vaMap[key] = { name: key, status: 'Unknown', accountCount: 0, lastMessage: '', channelId: '', guildId: '', firstMessage: '', notes: '', accounts: [], healthStats: { healthy: 0, shadowban: 0, permanent: 0, unknown: 0, warmup: 0, ready: 0, noBio: 0, valid: 0 } };
+        vaMap[key] = { name: key, status: 'Unknown', accountCount: 0, lastMessage: '', channelId: '', guildId: '', firstMessage: '', notes: '', accounts: [], healthStats: { healthy: 0, shadowban: 0, permanent: 0, unknown: 0, noBio: 0, valid: 0 } };
       }
       vaMap[key].accounts = group.accounts;
       vaMap[key].accountCount = group.accounts.length;
@@ -130,42 +127,23 @@ app.get('/api/crm', authMiddleware, async (req, res) => {
         else if (acc.status === 'Shadowbanned') s.shadowban++;
         else if (acc.status === 'Permanent') s.permanent++;
         else s.unknown++;
-
         if (acc.bioLink !== 'Oui') s.noBio++;
-
-        const isBanned = acc.status === 'Permanent' || acc.status === 'Shadowbanned';
-        if (!isBanned) s.valid++;
-
-        const notes = acc.notes || '';
-        const addMatch = notes.match(/Ajoute:(\d{2})\/(\d{2})\/(\d{4})/);
-        if (addMatch) {
-          const addDate = new Date(parseInt(addMatch[3]), parseInt(addMatch[2]) - 1, parseInt(addMatch[1]));
-          if (now - addDate.getTime() < FOUR_DAYS) s.warmup++;
-          else if (!isBanned && (!acc.lastTweet || acc.lastTweet === '')) s.ready++;
-        } else if (!isBanned && (!acc.lastTweet || acc.lastTweet === '')) {
-          s.ready++;
-        }
+        if (acc.status !== 'Permanent' && acc.status !== 'Shadowbanned') s.valid++;
       }
     }
 
-    const vas = Object.values(vaMap).sort((a, b) => {
-      const hs = b.healthStats.valid - a.healthStats.valid;
-      if (hs !== 0) return hs;
-      return b.accountCount - a.accountCount;
-    });
+    const vas = Object.values(vaMap).sort((a, b) => b.healthStats.valid - a.healthStats.valid || b.accountCount - a.accountCount);
 
     const totalAccounts = vas.reduce((s, v) => s + v.accountCount, 0);
     const totalValid = vas.reduce((s, v) => s + v.healthStats.valid, 0);
     const totalBanned = vas.reduce((s, v) => s + v.healthStats.permanent + v.healthStats.shadowban, 0);
-    const warmupTotal = vas.reduce((s, v) => s + v.healthStats.warmup, 0);
-    const readyTotal = vas.reduce((s, v) => s + v.healthStats.ready, 0);
     const byCount = {};
     for (let i = 0; i <= 5; i++) byCount[i] = vas.filter(v => v.healthStats.valid === i).length;
     const fivePlus = vas.filter(v => v.healthStats.valid >= 5).length;
 
     res.json({
       vas,
-      stats: { total: vas.length, totalAccounts, totalValid, totalBanned, warmupTotal, readyTotal, byCount, fivePlus }
+      stats: { total: vas.length, totalAccounts, totalValid, totalBanned, byCount, fivePlus }
     });
   } catch (err) {
     console.error('CRM error:', err);
