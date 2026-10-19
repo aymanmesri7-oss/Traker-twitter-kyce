@@ -1,7 +1,13 @@
-# Agence CRM — suivi VA & comptes Instagram
+# Agence CRM — qui a quels comptes Insta
 
-Dashboard Next.js 14 + Supabase pour superviser les VA et leurs comptes Instagram jetables.
-Tout est saisi à la main ; le dashboard calcule les échéances (story, check des vues, Reels de routine) en heure de Paris.
+Une seule page pour lister les VA et leurs comptes Instagram :
+
+- ajouter un VA avec juste son nom ;
+- cliquer sur un VA pour coller un lien Instagram et voir ses comptes ;
+- une note libre par VA (ex. « doit créer dans 24h ») ;
+- supprimer un compte (2 clics) ou un VA (avec confirmation).
+
+Pas de connexion : toute personne ayant l'URL voit et modifie les données.
 
 ## Lancer en local
 
@@ -13,19 +19,8 @@ npm run dev
 
 ## Supabase
 
-- Projet : `ig-crm` (eu-west-3). Schéma dans `supabase/migrations/`.
-- Pas d'authentification : toute personne ayant l'URL voit et modifie les données (RLS ouverte au rôle anon).
-- Règles en base : un @username ne peut être actif qu'une fois, et un VA ne peut pas dépasser `max_accounts_per_va` comptes actifs.
-
-## Pages
-
-| Route | Rôle |
-|---|---|
-| `/` | Quoi faire maintenant : urgences triées, rafraîchi toutes les 60 s |
-| `/vas` | Liste des VA, recherche, filtres, tri |
-| `/vas/[id]` | Fiche VA : comptes actifs + actions rapides, historique, timeline |
-| `/comptes` | Tableau global des comptes |
-| `/parametres` | Règles de calcul |
+Projet `ig-crm` (eu-west-3). Schéma dans `supabase/migrations/`.
+Un même compte Insta ne peut pas être enregistré deux fois.
 
 ## Déploiement Railway
 
