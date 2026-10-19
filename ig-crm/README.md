@@ -14,7 +14,7 @@ npm run dev
 ## Supabase
 
 - Projet : `ig-crm` (eu-west-3). Schéma dans `supabase/migrations/`.
-- RLS : seuls les utilisateurs connectés ont accès. **Désactiver les inscriptions** (Authentication → Sign In / Providers → décocher « Allow new users to sign up ») et créer l'admin via Authentication → Users → Add user.
+- Pas d'authentification : toute personne ayant l'URL voit et modifie les données (RLS ouverte au rôle anon).
 - Règles en base : un @username ne peut être actif qu'une fois, et un VA ne peut pas dépasser `max_accounts_per_va` comptes actifs.
 
 ## Pages

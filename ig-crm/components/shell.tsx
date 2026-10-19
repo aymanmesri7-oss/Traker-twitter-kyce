@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Home, Instagram, LogOut, Menu, Settings, Users, X, Zap } from "lucide-react";
+import { Home, Instagram, Menu, Settings, Users, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabaseBrowser } from "@/lib/supabase/client";
 import { useCrm } from "@/lib/data";
 import { computeAlerts } from "@/lib/compute";
 import { formatDuration } from "@/lib/time";
@@ -57,10 +56,9 @@ function Brand() {
   );
 }
 
-export function Shell({ email, children }: { email: string; children: React.ReactNode }) {
+export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const router = useRouter();
   const { accounts, vas, settings, now, loading } = useCrm();
 
   const urgentCount = useMemo(
@@ -70,19 +68,8 @@ export function Shell({ email, children }: { email: string; children: React.Reac
 
   useEffect(() => setOpen(false), [pathname]);
 
-  async function logout() {
-    await supabaseBrowser().auth.signOut();
-    router.replace("/login");
-    router.refresh();
-  }
-
   const footer = (
-    <div className="border-t border-line pt-4">
-      <div className="mb-2 truncate px-3 text-xs text-muted">{email}</div>
-      <button onClick={logout} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-muted transition hover:bg-white/[0.03] hover:text-white">
-        <LogOut className="h-4 w-4" /> Déconnexion
-      </button>
-    </div>
+    <div className="border-t border-line px-3 pt-4 text-xs text-muted">Heure de Paris</div>
   );
 
   return (
