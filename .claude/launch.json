@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "ig-crm", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "ig-crm", "run", "dev"], "port": 3000 }
+  ]
+}

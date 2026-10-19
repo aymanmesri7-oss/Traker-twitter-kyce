@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+
+html, body { background: #0a0a0f; color: #ececf1; }
+body { -webkit-tap-highlight-color: transparent; }
+
+::selection { background: rgba(124,108,246,0.35); }
+
+* { scrollbar-width: thin; scrollbar-color: #2a2a36 transparent; }
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+input[type="number"]::-webkit-inner-spin-button { opacity: 0.4; }
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface; }
+  .field { @apply h-10 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm text-white placeholder:text-muted/70 outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20; }
+  .label { @apply mb-1.5 block text-xs font-medium text-muted; }
+}
